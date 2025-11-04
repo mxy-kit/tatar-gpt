@@ -13,12 +13,14 @@ This repository demonstrates training a compact decoder‑only GPT model **from 
 
 
 
-This project includes two main Jupyter notebooks:
+This project includes two  Jupyter notebooks:
 
-| File                       | Description                                                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`train_llm.ipynb`**      | Contains the full training pipeline of the Tatar-language GPT model — including dataset loading, tokenizer setup, model initialization, training loop, and evaluation.                |
-| **`inference_demo.ipynb`** | Demonstrates model inference after training — shows how to generate text in Tatar using different decoding strategies (beam search, top-p sampling, etc.) and analyze model behavior. |
+
+| File | Description |
+|------|--------------|
+| **train_llm.ipynb** | Full training pipeline for a GPT2-like decoder-only model trained **from scratch** on the Tatar language corpus. Includes corpus cleaning, tokenizer training, model configuration, and loss logging. |
+| **inference_demo.ipynb** | Model evaluation and text generation demo. Includes beam search / top-p decoding, factual benchmark (Kazan mayor test), and qualitative analysis of generation quality. |
+
 ---
 
 ##  1. Corpus Preparation
