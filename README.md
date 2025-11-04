@@ -99,7 +99,7 @@ Tokenizer trained from scratch using `tokenizers` (Byte‑Level BPE).
 After training, the model was evaluated on the validation set using `Trainer.evaluate()`:
 
 
-```
+
 
 | Metric           | Value  | Interpretation                                   |
 |------------------|--------|--------------------------------------------------|
