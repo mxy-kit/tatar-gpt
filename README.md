@@ -11,18 +11,7 @@ This repository demonstrates training a compact decoder‑only GPT model **from 
 
 ---
 
-## 📋 Table of Contents
 
-* [1. Corpus Preparation](#-1-corpus-preparation)
-* [2. Tokenizer Training](#-2-tokenizer-training-byte-level-bpe)
-* [3. Model Configuration & Training](#-3-model-configuration--training)
-* [4. Optimization Experiment](#-4-optimization-experiment)
-* [5. Evaluation & Generation](#-5-model-evaluation--generation)
-* [6. Experiments](#-6-experiments)
-* [7. Mini‑Benchmark](#-7-mini-benchmark)
-
-
----
 
 ##  1. Corpus Preparation
 
@@ -105,8 +94,21 @@ Tokenizer trained from scratch using `tokenizers` (Byte‑Level BPE).
 | 2400 |       4.24 |     4.24 |
 | 2800 |       4.19 |     4.19 |
 
-**Validation Perplexity:** `exp(4.19) ≈ 66.0`
-✅ Stable convergence and consistent improvement.
+**Validation Perplexity:** 
+
+After training, the model was evaluated on the validation set using `Trainer.evaluate()`:
+
+
+```
+
+| Metric           | Value  | Interpretation                                   |
+|------------------|--------|--------------------------------------------------|
+| Validation loss  | 4.19   | Steadily decreased throughout training           |
+| Perplexity       | ≈66.0  | Coherent token prediction; learned basic syntax  |
+
+✅ The loss curve shows smooth convergence without signs of overfitting.  
+✅ Perplexity is reasonable for a small from-scratch model trained on ~100 MB text.
+
 
 ---
 
@@ -126,34 +128,40 @@ My custom **tokenizer** and **model weights** have been uploaded to Hugging Face
 
 ---
 
-## 💬 5. Model Evaluation & Generation
+## 5. Model Generation
 
-**Evaluate perplexity**
+### 5.1 Text Generation Setup
 
-```python
-from math import exp
 
-eval_res = trainer.evaluate(eval_dataset=lm_val)
-print("Perplexity:", exp(eval_res["eval_loss"]))
-```
-
-**Generation helper** (beam search / top‑p sampling, digit filtering, repetition & length penalties):
+Generation function (beam search + repetition penalty + digit suppression):
 
 ```python
-outputs = generate(
-    prompt,
-    max_new_tokens=80,
-    method="beam|topp",
-    top_p=0.9,
-    temperature=0.9,
-    no_repeat_ngram_size=3,
-    bad_words_ids=digit_ids,
-    repetition_penalty=1.1,
-    length_penalty=1.0,
-)
+import re
+
+def generate(prompt, max_new_tokens=80):
+    enc = tok(prompt, return_tensors="pt").to(device)
+    with torch.no_grad():
+        out = mdl.generate(
+            **enc,
+            max_new_tokens=max_new_tokens,
+            num_beams=4,
+            no_repeat_ngram_size=3,
+            repetition_penalty=1.2,
+            bad_words_ids=digit_ids or None,
+            pad_token_id=tok.pad_token_id,
+            eos_token_id=tok.eos_token_id,
+        )
+    text = tok.decode(out[0], skip_special_tokens=True)
+    text = re.sub(r"\d+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 ```
 
-**Examples**
+---
+
+### 5.2 Example Generations
+
+🟢 **Single factual prompt**
 
 | Prompt (Tatar)                               | Model Answer (sampled)                                                              |
 | -------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -162,41 +170,45 @@ outputs = generate(
 
 ✅ The model produces fluent, grammatically sound Tatar sentences.
 
----
+🟢 **Paraphrased mini-benchmark**
 
-## 6. Experiments
+| Prompt                                   | Model Response (excerpt)           |
+|------------------------------------------|------------------------------------|
+| Казан шәһәре мэры кем?                   | … Илсур Метшин хәбәр итә.          |
+| Казан шәһәре мэры турында кыскача яз.    | … Казан шәһәре мэры Илсур Метшин … |
+| Казан шәһәре мэры — ул кем?              | … Казан шәһәре мэры Илсур Метшин … |
+| Казан шәһәре мэры турында өч җөмлә яз.   | … Казан шәһәре мэры Илсур Метшин … |
 
-1. **Tokenizer selection** — 16k gives the best compactness/efficiency balance.
-2. **Training optimization** — bf16 + checkpointing ≈30% lower memory, same loss.
-3. **Decoding strategies**
-
-| Method         | Style             | Notes           |
-| -------------- | ----------------- | --------------- |
-| Beam search    | factual, focused  | concise answers |
-| Top‑p sampling | diverse, creative | richer text     |
-
-4. **Ablation: `max_new_tokens`**
-
-| Tokens | Behavior                 |
-| -----: | ------------------------ |
-|     40 | short and precise        |
-|     80 | balanced                 |
-|    160 | long, slightly off‑topic |
+✅ Across multiple phrasings, outputs remain factual and grammatical, indicating the model captures semantic meaning rather than only memorizing surface forms. The model gives the same answer regardless of how the question is phrased.
 
 ---
 
-## 🧩 7. Mini‑Benchmark
+### 5.3 Ablation: max_new_tokens
 
-| Metric  | Meaning                | Score |
-| ------- | ---------------------- | ----: |
-| notEcho | no question repetition |   0.0 |
-| kwCover | keyword coverage       |   1.0 |
+Different `max_new_tokens` were tested: **40 / 80 / 160**
 
-✅ Model identifies key facts (e.g., «Илсур Метшин», «Казан»).
+- 40 → shorter, more focused outputs  
+- 80–160 → news-style paragraphs; longer sentences with prompt repetition or topic drift  
+- All variants underperformed the default configuration in factual precision and relevance
+
+✅ **Conclusion:** The model can sustain longer, coherent text (good contextual continuity), but default parameters yield the most accurate and relevant answers.
 
 ---
 
-## 🚀 8. Model Upload
+### 5.4 Decoding Comparison: Beam Search vs Top-p Sampling
+
+| Strategy     | Expected Characteristics         | Actual Observation                                                                 |
+|--------------|----------------------------------|-------------------------------------------------------------------------------------|
+| Beam Search  | Deterministic; syntactically stable | Tends to repeat the prompt; generic/incomplete sentences lacking key facts         |
+| Top-p        | More diverse and creative        | News-like, verbose text; irrelevant entities; semantic drift (e.g., “... Ульяновски …”) |
+
+✅ **Conclusion:** Both decoding strategies performed worse than the default setup:
+
+- **Beam Search** → short but uninformative, prompt-echoing  
+- **Top-p** → longer yet off-topic  
+
+➡️ Therefore, retaining the **default decoding parameters** is most reliable for this task.
+
 
 
 
